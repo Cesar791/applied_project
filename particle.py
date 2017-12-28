@@ -15,7 +15,7 @@ def predict(S, v, R, delta_t):
     randM = np.random.rand(nx, M)
     Rvert = np.diag(R)[np.newaxis, :].T # Diagonal elements of R stacked.
 
-    diffusion = np.multiply(np.random.rand(nx, M), np.diag(R)[np.newaxis, :].T)
+    diffusion = np.multiply(np.random.randn(nx, M), np.diag(R)[np.newaxis, :].T)
 
     S_bar[0:nx, :] = S[0:nx, :] + u + diffusion
     S_bar[nx, :] = S[nx, :]
@@ -47,7 +47,8 @@ def systematic_resample(S_bar):
 
 def weight(S_bar, psi, outlier):
     """Weigh the particles according to the probabilities in psi. """
-    psi_inliers = psi[np.invert(outlier), :]    # Discard outlier measurements.
+    #psi_inliers = psi[np.invert(outlier), :]    # Discard outlier measurements.
+    psi_inliers = psi
     nx = S_bar.shape[0] - 1
     if psi_inliers.size > 0:
 
@@ -100,9 +101,14 @@ def main():
     outlier, psi = associate(S_bar, z, lambda_psi, Q)
 
     S_bar = weight(S_bar, psi, outlier)
-
     S = systematic_resample(S_bar)
 
+    S1 = np.array([
+        [1., 2., 3., 4., 5.],
+        [1., 2., 3., 4., 5.],
+        [0, .5, 0.4, 0, 0.1]])
+    print(S1)
+    print(systematic_resample(S1))
 
 
 
