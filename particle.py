@@ -47,8 +47,8 @@ def systematic_resample(S_bar):
 
 def weight(S_bar, psi, outlier):
     """Weigh the particles according to the probabilities in psi. """
-    #psi_inliers = psi[np.invert(outlier), :]    # Discard outlier measurements.
-    psi_inliers = psi
+    psi_inliers = psi[np.invert(outlier), :]    # Discard outlier measurements.
+    #psi_inliers = psi
     nx = S_bar.shape[0] - 1
     if psi_inliers.size > 0:
 
@@ -71,7 +71,7 @@ def associate(S_bar, z, lambda_psi, Q):
 
     nu = z_obs - z_pred # True observation minus predicted observation.
 
-    exp_term = -0.5*np.sum(np.multiply(np.dot(nu.T, Q).T, nu), axis = 0)
+    exp_term = -0.5*np.sum(np.multiply(np.dot(nu.T, np.linalg.inv(Q)).T, nu), axis = 0)
     psis = 1/(2*math.pi*math.sqrt(np.linalg.det(Q)))*np.exp(exp_term)
 
     psi = np.reshape(psis, (n, M)) # Rows: measurements, columns: particles.

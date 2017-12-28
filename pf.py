@@ -68,7 +68,7 @@ def particle_mean(S):
     return np.mean(S[0, :]), np.mean(S[1, :])
 
 if __name__ == '__main__':
-    directorypath = '/home/filip/el2320/project/vot2016/gymnastics1'
+    directorypath = '/home/filip/el2320/project/vot2016/graduate'
 
     # read dataset
     dataset = readDataset(directorypath)
@@ -86,8 +86,8 @@ if __name__ == '__main__':
     if k == ord('q'):
         cv2.destroyAllWindows()
 
-    R = np.diag([1, 1])*0
-    Q = np.diag([100, 100])*0.0000001
+    R = np.diag([1., 1.])
+    Q = np.diag([100, 100])*0.1
 
 
     for i in range(dataset.shape[0]):
@@ -102,16 +102,17 @@ if __name__ == '__main__':
         if observation.size > 0:
 
             outlier, psi = particle.associate(S_bar, observation, 0.00001, Q)
-            print(observation)
+            print(outlier)
 
             S_bar = particle.weight(S_bar, psi, outlier)
 
             S = particle.systematic_resample(S_bar)
         else:
             S = S_bar
+            print()
 
         xmean, ymean = particle_mean(S)
-        print('x: {}, y: {}'.format(xmean, ymean))
+        #print('x: {}, y: {}'.format(xmean, ymean))
 
         img = draw_particles(S, img)
 
