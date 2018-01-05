@@ -9,7 +9,7 @@ import os
 class ParticleFilter:
 
     def __init__(self, dirpath, M, R, Q, lambda_psi,
-        draw_rectangles = True, uWeight = 1):
+        draw_rectangles = True, uWeight = 1, ground_truth_path = None):
 
         self.M = M
         self.R = R
@@ -23,23 +23,25 @@ class ParticleFilter:
         self.imgy = self.dataset[0].shape[0]
         self.xdim = self.imgx        # Size for scaled images.
         self.ydim = self.imgy
+        self.scale = 1
 
         self.xMeanOld = 0
         self.yMeanOld = 0
 
         self.uWeight = uWeight
 
+        if ground_truth_path is not None:
+            self.display_ground_truth = True
+            self.ground_truth_path = ground_truth_path
+        else:
+            self.display_ground_truth = True
+            self.ground_truth_path = ''
+
 
     def scale_images(self, scale):
+        self.scale = scale
         self.xdim = int(self.imgx*scale)
         self.ydim = int(self.imgy*scale)
-        # old_dataset = self.dataset
-        # self.dataset = np.zeros((self.xdim, self.ydim))
-        #
-        # for i in range(self.dataset.shape[0]):
-        #     img = self.dataset[i]
-        #     img = cv2.resize(img, (self.xdim, self.ydim))
-        #     self.dataset[i] = img
 
 
     # reads dataset
@@ -214,13 +216,59 @@ class ParticleFilter:
         return outlier, psi
 
 
+    def draw_ground_truth(self, img, truth_corners):
+        clr = (0, 255, 0)
+        thick = 2
+        try:
+            cv2.line(img,
+                (int(float(truth_corners[0])*self.scale),
+                int(float(truth_corners[1])*self.scale)),
+                (int(float(truth_corners[2])*self.scale),
+                int(float(truth_corners[3])*self.scale)),
+                clr, thick)
+
+            cv2.line(img,
+                (int(float(truth_corners[2])*self.scale),
+                int(float(truth_corners[3])*self.scale)),
+                (int(float(truth_corners[4])*self.scale),
+                int(float(truth_corners[5])*self.scale)),
+                clr, thick)
+
+            cv2.line(img,
+                (int(float(truth_corners[4])*self.scale),
+                int(float(truth_corners[5])*self.scale)),
+                (int(float(truth_corners[6])*self.scale),
+                int(float(truth_corners[7])*self.scale)),
+                clr, thick)
+
+            cv2.line(img,
+                (int(float(truth_corners[6])*self.scale),
+                int(float(truth_corners[7])*self.scale)),
+                (int(float(truth_corners[0])*self.scale),
+                int(float(truth_corners[1])*self.scale)),
+                clr, thick)
+            return img
+        except Exception as e:
+            print(e)
+            return img
+
+
     def run_particle_filter(self):
+        if self.display_ground_truth:
+            f = open(self.ground_truth_path, 'r')
+
         S = self.initParticleSet(1, 1)
 
         for i in range(0, self.dataset.shape[0]):
             print(i)
+
             img = self.dataset[i]
-            img = cv2.resize(img, (self.xdim, self.ydim))#(128, 128))
+            img = cv2.resize(img, (self.xdim, self.ydim))
+
+            if self.display_ground_truth:
+                line = f.readline()
+                truth_coords = line.split(',')
+                img = self.draw_ground_truth(img, truth_coords)
 
             if i > 0:
                 S_bar = self.predict(S, i)
@@ -235,7 +283,7 @@ class ParticleFilter:
                 else:
                     S = S_bar
 
-                xmean, ymean = self.particle_mean(S)
+            xmean, ymean = self.particle_mean(S)
 
             img = self.draw_particles(S, img)
 
@@ -244,6 +292,11 @@ class ParticleFilter:
             if k == ord('q'):
                 cv2.destroyAllWindows()
                 break;
+
+        try:
+            f.close()
+        except:
+            pass
 
 
 def main():
@@ -255,7 +308,7 @@ def main():
     Q_val = 0.01
     lambda_psi = 0.1
     scale = 0.75
-    uWeight = 0
+    uWeight = 0.5
 
     draw_rectangles = True
 
@@ -263,10 +316,13 @@ def main():
     Q = np.diag([1., 1.])*Q_val
 
     directory_path = path_prefix + path_end
-    directory_path = 'iceskater1'
+    #directory_path = 'iceskater1'
+
+    ground_truth_path = directory_path + '/groundtruth.txt'
 
     p = ParticleFilter(directory_path, M, R, Q, lambda_psi,
-        draw_rectangles = draw_rectangles, uWeight = uWeight)
+        draw_rectangles = draw_rectangles, uWeight = uWeight,
+        ground_truth_path = ground_truth_path)
 
     p.scale_images(scale)
 
