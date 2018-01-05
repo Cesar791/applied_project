@@ -9,7 +9,7 @@ import os
 class ParticleFilter:
 
     def __init__(self, dirpath, M, R, Q, lambda_psi,
-        draw_rectangles = True):
+        draw_rectangles = True, uWeight = 1):
 
         self.M = M
         self.R = R
@@ -23,6 +23,11 @@ class ParticleFilter:
         self.imgy = self.dataset[0].shape[0]
         self.xdim = self.imgx        # Size for scaled images.
         self.ydim = self.imgy
+
+        self.xMeanOld = 0
+        self.yMeanOld = 0
+
+        self.uWeight = uWeight
 
 
     def scale_images(self, scale):
@@ -107,17 +112,36 @@ class ParticleFilter:
         return np.mean(S[0, :]), np.mean(S[1, :])
 
 
-    def predict(self, S, v, delta_t):
+    def getU(self, S, iter):
+        #xMean, yMean = self.particle_mean(S)
+
+        if(iter == 3):
+            xMean, yMean = self.particle_mean(S)
+            self.xMeanOld = xMean
+            self.yMeanOld = yMean
+        elif iter > 3:
+            xMean, yMean = self.particle_mean(S)
+            deltaXMean = xMean - self.xMeanOld
+            deltaYMean = yMean - self.yMeanOld
+
+            self.yMeanOld = yMean
+            self.xMeanOld = xMean
+
+            return self.uWeight * np.array([[deltaXMean], [deltaYMean]])
+
+        return np.array([[0], [0]])
+
+
+
+    def predict(self, S, iter):
         """Propagate particles according to motion model. Add diffusion. """
         S_bar = np.zeros(S.shape)
 
         nx = S.shape[0] - 1
 
         # Motion model.
-        u = np.array([[0], [0]])
-
-        randM = np.random.rand(nx, self.M)
-        Rvert = np.diag(self.R)[np.newaxis, :].T # Diagonal elements of R stacked.
+        #u = np.array([[0], [0]])
+        u = self.getU(S, iter)
 
         diffusion = np.multiply(np.random.randn(nx, self.M), np.diag(self.R)[np.newaxis, :].T)
 
@@ -199,7 +223,7 @@ class ParticleFilter:
             img = cv2.resize(img, (self.xdim, self.ydim))#(128, 128))
 
             if i > 0:
-                S_bar = self.predict(S, 0, 0)
+                S_bar = self.predict(S, i)
                 img, observation = self.preProc(img)
                 if observation.size > 0:
 
@@ -231,6 +255,7 @@ def main():
     Q_val = 0.01
     lambda_psi = 0.1
     scale = 0.75
+    uWeight = 0
 
     draw_rectangles = True
 
@@ -238,9 +263,10 @@ def main():
     Q = np.diag([1., 1.])*Q_val
 
     directory_path = path_prefix + path_end
+    directory_path = 'iceskater1'
 
     p = ParticleFilter(directory_path, M, R, Q, lambda_psi,
-        draw_rectangles = draw_rectangles)
+        draw_rectangles = draw_rectangles, uWeight = uWeight)
 
     p.scale_images(scale)
 
