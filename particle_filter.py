@@ -10,7 +10,8 @@ import os
 class ParticleFilter:
 
     def __init__(self, dirpath, M, R, Q, lambda_psi,
-                 draw_rectangles=True, uWeight=1, ground_truth_path=None):
+                 draw_rectangles = True, draw_all_particles = True,
+                 uWeight = 1, ground_truth_path = None):
 
         self.M = M
         self.R = R
@@ -18,6 +19,7 @@ class ParticleFilter:
         self.lambda_psi = lambda_psi
 
         self.draw_rectangles = draw_rectangles
+        self.draw_all_particles = draw_all_particles
 
         self.dataset = self.readDataset(dirpath)
         self.imgx = self.dataset[0].shape[1]  # Original image size.
@@ -87,15 +89,21 @@ class ParticleFilter:
 
         return img, pos
 
-    def draw_particles(self, S, img):
+    def draw_particles(self, S, img, clr = (0, 255, 0)):
         for i in range(S.shape[1]):
             cv2.circle(
-                img, (int(S[0, i] * self.xdim), int(S[1, i] * self.ydim)), 2, (0, 255, 0), 2)
-
-        xc, yc = self.particle_mean(S)
-        cv2.circle(img, (int(xc * self.xdim), int(yc * self.ydim)), 3, (0, 0, 255), 3)
+                img, (int(S[0, i]*self.xdim), int(S[1, i]*self.ydim)), 2, clr, 2)
 
         return img
+
+
+    def draw_particle_mean(self, S, img, clr = (0, 0, 255)):
+        xc, yc = self.particle_mean(S)
+        cv2.circle(
+            img, (int(xc*self.xdim), int(yc*self.ydim)), 3, clr, 3)
+
+        return img
+
 
     def initParticleSet(self, imgWidth, imgHeight):
         x = np.random.uniform(0, imgWidth, self.M)
@@ -204,44 +212,36 @@ class ParticleFilter:
 
         return outlier, psi
 
-    def draw_ground_truth(self, img, truth_corners):
-        clr = (0, 255, 0)
+    def draw_ground_truth(self, img, corners_list, clr = (0, 255, 0)):
         thick = 2
+
+        tc = (np.asarray(corners_list).astype(float)*self.scale).astype(int)
+
         try:
-            cv2.line(img,
-                     (int(float(truth_corners[0]) * self.scale),
-                      int(float(truth_corners[1]) * self.scale)),
-                     (int(float(truth_corners[2]) * self.scale),
-                      int(float(truth_corners[3]) * self.scale)),
-                     clr, thick)
+            cv2.line(img, (tc[0], tc[1]), (tc[2], tc[3]), clr, thick)
+            cv2.line(img, (tc[2], tc[3]), (tc[4], tc[5]), clr, thick)
+            cv2.line(img, (tc[4], tc[5]), (tc[6], tc[7]), clr, thick)
+            cv2.line(img, (tc[6], tc[7]), (tc[0], tc[1]), clr, thick)
 
-            cv2.line(img,
-                     (int(float(truth_corners[2]) * self.scale),
-                      int(float(truth_corners[3]) * self.scale)),
-                     (int(float(truth_corners[4]) * self.scale),
-                      int(float(truth_corners[5]) * self.scale)),
-                     clr, thick)
+            x_mean, y_mean = self.get_ground_truth_mean(corners_list)
+            cv2.circle(img, (int(x_mean), int(y_mean)), 3, clr, 3)
 
-            cv2.line(img,
-                     (int(float(truth_corners[4]) * self.scale),
-                      int(float(truth_corners[5]) * self.scale)),
-                     (int(float(truth_corners[6]) * self.scale),
-                      int(float(truth_corners[7]) * self.scale)),
-                     clr, thick)
-
-            cv2.line(img,
-                     (int(float(truth_corners[6]) * self.scale),
-                      int(float(truth_corners[7]) * self.scale)),
-                     (int(float(truth_corners[0]) * self.scale),
-                      int(float(truth_corners[1]) * self.scale)),
-                     clr, thick)
-            return img
         except Exception as e:
             print(e)
-            return img
 
-    # (0 < AM⋅AB<AB⋅AB)∧(0 < AM⋅AD < AD⋅AD) =
-    # (0 < AM⋅AB) ∧ (BM⋅AB < 0) ∧ (0 < AM⋅AD) ∧ (DM⋅AD < 0)
+        return img
+
+
+    def get_ground_truth_mean(self, corners_list):
+        tc = np.asarray(corners_list).astype(float)*self.scale
+
+        try:
+            return np.mean(tc[0::2]), np.mean(tc[1::2])
+        except Exception as e:
+            print(e)
+            return 0, 0
+
+
     def accuracy(self, xMean, yMean, truth_corners):
         x1 = (int(float(truth_corners[0]) * self.scale))
         y1 = (int(float(truth_corners[1]) * self.scale))
@@ -268,16 +268,16 @@ class ParticleFilter:
 
         S = self.initParticleSet(1, 1)
 
+        total_rects = 0
+        total_outliers = 0
+
+        errors = np.array([])
+
         for i in range(0, self.dataset.shape[0]):
             print(i)
 
             img = self.dataset[i]
             img = cv2.resize(img, (self.xdim, self.ydim))
-
-            if self.display_ground_truth:
-                line = f.readline()
-                truth_coords = line.split(',')
-                img = self.draw_ground_truth(img, truth_coords)
 
             if i > 0:
                 S_bar = self.predict(S, i)
@@ -285,6 +285,8 @@ class ParticleFilter:
                 if observation.size > 0:
 
                     outlier, psi = self.associate(S_bar, observation)
+                    total_rects += outlier.size
+                    total_outliers += np.sum(outlier)
 
                     S_bar = self.weight(S_bar, psi, outlier)
 
@@ -292,22 +294,40 @@ class ParticleFilter:
                 else:
                     S = S_bar
 
-            xmean, ymean = self.particle_mean(S)
+                img = self.draw_particles(S, img)
+                img = self.draw_particle_mean(S, img)
 
-            img = self.draw_particles(S, img)
+                if self.display_ground_truth:
+                    line = f.readline()
+                    truth_coords = line.split(',')
+                    img = self.draw_ground_truth(
+                        img, truth_coords, (255, 255, 255))
 
-            # accuracy
-            print(self.accuracy(xmean, ymean, truth_coords))
+                    xpmean, ypmean = self.particle_mean(S)
+                    xtruth_mean, ytruth_mean = self.get_ground_truth_mean(
+                    truth_coords)
+                    mean_error = math.sqrt(
+                        (xpmean*self.xdim - xtruth_mean)**2 +
+                        (ypmean*self.ydim - ytruth_mean)**2
+                    )
+
+                    errors = np.hstack((errors, mean_error))
+                xmean, ymean = self.particle_mean(S)
+                self.accuracy(xmean, ymean, truth_coords)
 
             cv2.imshow('', img)
-            k = cv2.waitKey(0)
+            k = cv2.waitKey(10)
             if k == ord('q'):
                 cv2.destroyAllWindows()
                 break;
 
         # Accuracy
-        acc = (self.score/self.dataset.shape[0]) * 100
+        acc = (float(self.score)/float(self.dataset.shape[0])) * 100
         print('Accuracy: {} %'.format(acc))
+        print('Error mean: {}, variance {}'.format(
+            np.mean(errors), np.var(errors)))
+        print('Total observations: {}, outliers: {}'.format(
+            total_rects, total_outliers))
 
         try:
             f.close()
@@ -319,20 +339,20 @@ def main():
     path_prefix = '/home/filip/el2320/project/vot2016/'
     path_end = 'iceskater1'
 
-    M = 50
+    M = 100
     R_val = 0.02
-    Q_val = 0.01
+    Q_val = 0.0001
     lambda_psi = 0.1
     scale = 0.75
     uWeight = 0.5
 
-    draw_rectangles = True
+    draw_rectangles = False
 
     R = np.diag([1., 1.]) * R_val
     Q = np.diag([1., 1.]) * Q_val
 
     directory_path = path_prefix + path_end
-    directory_path = 'iceskater1'
+    #directory_path = 'iceskater1'
 
     ground_truth_path = directory_path + '/groundtruth.txt'
 
