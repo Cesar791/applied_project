@@ -42,13 +42,16 @@ class ParticleFilter:
             self.display_ground_truth = True
             self.ground_truth_path = ''
 
+
     def scale_images(self, scale):
+        """Sets the new scaled image dimension values. """
         self.scale = scale
         self.xdim = int(self.imgx * scale)
         self.ydim = int(self.imgy * scale)
 
-    # reads dataset
+
     def readDataset(self, dirpath):
+        """Reads the dataset and returns the image matrices in an array. """
         img_list = []
         for name in os.listdir(dirpath):
             if name.endswith('.jpg'):
@@ -62,8 +65,11 @@ class ParticleFilter:
         else:
             return "Error no directory found"
 
-    # pre proccess single image
+
     def preProc(self, img):
+        """Performs the OpenCV people detection on a single image. Returns the
+        middle point of the detected rectangles (can be multiple), and the image
+        with the rectangle drawn on it. """
         # init detector
         hog = cv2.HOGDescriptor()
         hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
@@ -89,7 +95,9 @@ class ParticleFilter:
 
         return img, pos
 
+
     def draw_particles(self, S, img, clr = (0, 255, 0)):
+        """Draws all the particles. """
         for i in range(S.shape[1]):
             cv2.circle(
                 img, (int(S[0, i]*self.xdim), int(S[1, i]*self.ydim)), 2, clr, 2)
@@ -98,6 +106,7 @@ class ParticleFilter:
 
 
     def draw_particle_mean(self, S, img, clr = (0, 0, 255)):
+        """Draws a circle at the mean position of the particles. """
         xc, yc = self.particle_mean(S)
         cv2.circle(
             img, (int(xc*self.xdim), int(yc*self.ydim)), 3, clr, 3)
@@ -106,6 +115,7 @@ class ParticleFilter:
 
 
     def initParticleSet(self, imgWidth, imgHeight):
+        """Initializes the particles randomly uniformly over the area. """
         x = np.random.uniform(0, imgWidth, self.M)
         y = np.random.uniform(0, imgHeight, self.M)
         w = np.ones(self.M) * (1. / self.M)
@@ -114,11 +124,16 @@ class ParticleFilter:
 
         return S
 
+
     def particle_mean(self, S):
+        """Returns the mean x and y positions of the particles. """
         return np.mean(S[0, :]), np.mean(S[1, :])
 
+
     def getU(self, S, iter):
-        # xMean, yMean = self.particle_mean(S)
+        """Returns a vector that contains how the particle mean moved in the
+        previous two steps. If the particle filter is in the first two
+        iterations it returns zero. """
 
         if (iter == 3):
             xMean, yMean = self.particle_mean(S)
@@ -136,14 +151,16 @@ class ParticleFilter:
 
         return np.array([[0], [0]])
 
+
     def predict(self, S, iter):
-        """Propagate particles according to motion model. Add diffusion. """
+        """Propagate particles according to estimated motion model. The Motion
+        is estimated from previous particle means. Adds diffusion to the
+        prediction. """
         S_bar = np.zeros(S.shape)
 
         nx = S.shape[0] - 1
 
         # Motion model.
-        # u = np.array([[0], [0]])
         u = self.getU(S, iter)
 
         diffusion = np.multiply(np.random.randn(nx, self.M), np.diag(self.R)[np.newaxis, :].T)
@@ -152,6 +169,7 @@ class ParticleFilter:
         S_bar[nx, :] = S[nx, :]
 
         return S_bar
+
 
     def systematic_resample(self, S_bar):
         """Perform systematic resampling of the particles. """
@@ -191,8 +209,11 @@ class ParticleFilter:
 
         return S_bar
 
-    def associate(self, S_bar, z):
-        """Calculate probability of each particle given each measurement. """
+
+    def get_observation_probabilities(self, S_bar, z):
+        """Calculate probability of each particle given each measurement.
+        Returns the probabilities matrix psi and a vector outlier which tells
+        if a measurement is an outlier or not. """
         n = z.shape[1]
         nx = S_bar.shape[0] - 1
         dim = nx
@@ -212,7 +233,10 @@ class ParticleFilter:
 
         return outlier, psi
 
+
     def draw_ground_truth(self, img, corners_list, clr = (0, 255, 0)):
+        """Draws a rectangle on the image by connecting the corners in the
+        ground truth with lines. """
         thick = 2
 
         tc = (np.asarray(corners_list).astype(float)*self.scale).astype(int)
@@ -233,6 +257,7 @@ class ParticleFilter:
 
 
     def get_ground_truth_mean(self, corners_list):
+        """Returns the mean value of the ground truth corner coordinates. """
         tc = np.asarray(corners_list).astype(float)*self.scale
 
         try:
@@ -243,6 +268,8 @@ class ParticleFilter:
 
 
     def accuracy(self, xMean, yMean, truth_corners):
+        """Increments the variable self.score if the particle mean is inside
+        of the ground truth bounding box. """
         x1 = (int(float(truth_corners[0]) * self.scale))
         y1 = (int(float(truth_corners[1]) * self.scale))
         x2 = (int(float(truth_corners[2]) * self.scale))
@@ -262,7 +289,10 @@ class ParticleFilter:
 
         return 'False'
 
+
     def run_particle_filter(self):
+        """Runs the particle filter. Initializes particles, performs the
+        predict and update steps for each image in the dataset. """
         if self.display_ground_truth:
             f = open(self.ground_truth_path, 'r')
 
@@ -284,7 +314,8 @@ class ParticleFilter:
                 img, observation = self.preProc(img)
                 if observation.size > 0:
 
-                    outlier, psi = self.associate(S_bar, observation)
+                    outlier, psi = self.get_observation_probabilities(
+                        S_bar, observation)
                     total_rects += outlier.size
                     total_outliers += np.sum(outlier)
 
@@ -339,14 +370,14 @@ def main():
     path_prefix = '/home/filip/el2320/project/vot2016/'
     path_end = 'iceskater1'
 
-    M = 100
-    R_val = 0.02
-    Q_val = 0.0001
-    lambda_psi = 0.1
-    scale = 0.75
-    uWeight = 0.5
+    M = 100             # Number of particles.
+    R_val = 0.02        # Value used for process noise covariance.
+    Q_val = 0.01      # Value used for measurement noise covariance.
+    lambda_psi = 0.1    # Threshold for outlier detection.
+    scale = 0.75        # Downscaling of images to speed up computation.
+    uWeight = 0.5       # A weight on the estimated motion model.
 
-    draw_rectangles = False
+    draw_rectangles = False # Draw rectangles for the OpenCV people detect.
 
     R = np.diag([1., 1.]) * R_val
     Q = np.diag([1., 1.]) * Q_val
